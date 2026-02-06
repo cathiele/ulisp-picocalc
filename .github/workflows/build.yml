@@ -1,0 +1,73 @@
+name: Build uLisp PicoCalc
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Arduino CLI
+      uses: arduino/setup-arduino-cli@v1
+      
+    - name: Update core index
+      run: |
+        arduino-cli core update-index --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+        
+    - name: Install RP2040 core
+      run: |
+        arduino-cli core install rp2040:rp2040 --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+        
+    - name: Install TFT_eSPI library
+      run: |
+        arduino-cli lib install "TFT_eSPI"
+        
+    - name: Install PCKeyboard library
+      run: |
+        mkdir -p ~/Arduino/libraries
+        cd ~/Arduino/libraries
+        git clone https://github.com/cuu/arduino_picocalc_kbd.git PCKeyboard
+        
+    - name: Configure TFT_eSPI
+      run: |
+        cp Setup60_RP2040_ILI9488.h ~/Arduino/libraries/TFT_eSPI/User_Setup.h
+        
+    - name: Prepare source files
+      run: |
+        # Rename comments file to prevent double compilation
+        if [ -f "ulisp-picocalc-comments.ino" ]; then
+          mv ulisp-picocalc-comments.ino ulisp-picocalc-comments.ino.txt
+        fi
+        
+    - name: Compile sketch
+      run: |
+        arduino-cli compile --fqbn rp2040:rp2040:rpipico2w ulisp-picocalc.ino --warnings none --output-dir build
+        
+    - name: Upload firmware artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ulisp-picocalc-firmware
+        path: |
+          build/*.uf2
+          build/*.elf
+          build/*.hex
+        if-no-files-found: error
+        
+    - name: Get firmware info
+      run: |
+        echo "### Build Information" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ -f build/ulisp-picocalc.ino.uf2 ]; then
+          SIZE=$(ls -lh build/ulisp-picocalc.ino.uf2 | awk '{print $5}')
+          echo "- Firmware size: $SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "- Target: Raspberry Pi Pico 2 (RP2350)" >> $GITHUB_STEP_SUMMARY
+          echo "- Board: rpipico2w" >> $GITHUB_STEP_SUMMARY
+        fi
