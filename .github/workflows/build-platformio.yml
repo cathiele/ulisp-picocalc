@@ -1,0 +1,51 @@
+name: Build uLisp PicoCalc
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+        
+    - name: Install PlatformIO
+      run: |
+        pip install platformio
+        
+    - name: Build firmware with PlatformIO
+      run: |
+        pio run
+        
+    - name: Upload firmware artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ulisp-picocalc-firmware
+        path: |
+          ulisp-picocalc-pico2w.uf2
+          .pio/build/pico2w/*.elf
+          .pio/build/pico2w/*.bin
+        if-no-files-found: error
+        
+    - name: Get firmware info
+      run: |
+        echo "### Build Information" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ -f ulisp-picocalc-pico2w.uf2 ]; then
+          SIZE=$(ls -lh ulisp-picocalc-pico2w.uf2 | awk '{print $5}')
+          echo "- Firmware size: $SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "- Firmware file: ulisp-picocalc-pico2w.uf2" >> $GITHUB_STEP_SUMMARY
+          echo "- Target: Raspberry Pi Pico 2W (RP2350)" >> $GITHUB_STEP_SUMMARY
+          echo "- Build environment: pico2w" >> $GITHUB_STEP_SUMMARY
+        fi

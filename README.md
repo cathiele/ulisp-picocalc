@@ -1,3 +1,7 @@
+# Picocalc uLisp Machine (PlatformIO)
+
+I modified the setup to be able to build it with platform io instead arduino ide.
+
 # PicoCalc uLisp Machine
 A version of uLisp to convert the Clockwork Pi PicoCalc into a self-contained handheld Lisp computer. The files are as follows:
 
