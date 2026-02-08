@@ -7704,7 +7704,7 @@ void initgfx () {
 }
 
 void setup () {
-  Serial.begin(115200);
+  Serial.begin(9600);
   int start = millis();
   while ((millis() - start) < 5000) { if (Serial) break; }
   #if defined(sdcardsupport)

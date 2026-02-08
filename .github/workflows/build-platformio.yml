@@ -3,6 +3,8 @@ name: Build uLisp PicoCalc
 on:
   push:
     branches: [ main, master ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -14,6 +16,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
       
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -27,16 +31,21 @@ jobs:
     - name: Build firmware with PlatformIO
       run: |
         pio run
+    
+    - name: Prepare release files
+      run: |
+        # Get short commit hash and date
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        BUILD_DATE=$(date +%Y%m%d)
         
-    - name: Upload firmware artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ulisp-picocalc-firmware
-        path: |
-          ulisp-picocalc-pico2w.uf2
-          .pio/build/pico2w/*.elf
-          .pio/build/pico2w/*.bin
-        if-no-files-found: error
+        # Rename firmware with commit hash
+        if [ -f ulisp-picocalc-pico2w.uf2 ]; then
+          cp ulisp-picocalc-pico2w.uf2 ulisp-picocalc-pico2w-${BUILD_DATE}-${SHORT_SHA}.uf2
+        fi
+        
+        # Store variables for next steps
+        echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_ENV
+        echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
         
     - name: Get firmware info
       run: |
@@ -45,7 +54,63 @@ jobs:
         if [ -f ulisp-picocalc-pico2w.uf2 ]; then
           SIZE=$(ls -lh ulisp-picocalc-pico2w.uf2 | awk '{print $5}')
           echo "- Firmware size: $SIZE" >> $GITHUB_STEP_SUMMARY
-          echo "- Firmware file: ulisp-picocalc-pico2w.uf2" >> $GITHUB_STEP_SUMMARY
+          echo "- Firmware file: ulisp-picocalc-pico2w-${BUILD_DATE}-${SHORT_SHA}.uf2" >> $GITHUB_STEP_SUMMARY
           echo "- Target: Raspberry Pi Pico 2W (RP2350)" >> $GITHUB_STEP_SUMMARY
           echo "- Build environment: pico2w" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
         fi
+    
+    # Upload as artifact for PRs and non-release builds
+    - name: Upload firmware artifacts
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ulisp-picocalc-firmware-${{ env.SHORT_SHA }}
+        path: |
+          ulisp-picocalc-pico2w-*.uf2
+        if-no-files-found: error
+    
+    # Create/update "latest" release for pushes to main/master
+    - name: Update Latest Release
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: latest
+        name: Latest Build
+        body: |
+          ## Latest Development Build
+          
+          **Commit:** ${{ github.sha }}
+          **Date:** ${{ env.BUILD_DATE }}
+          **Branch:** ${{ github.ref_name }}
+          
+          This is an automated build from the latest commit on the main branch.
+          
+          ### Changes
+          ${{ github.event.head_commit.message }}
+        files: |
+          ulisp-picocalc-pico2w-*.uf2
+        prerelease: true
+        draft: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    # Create versioned release for tags
+    - name: Create Version Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## Release ${{ github.ref_name }}
+          
+          **Commit:** ${{ github.sha }}
+          **Date:** ${{ env.BUILD_DATE }}
+          
+          Firmware build for uLisp PicoCalc on Raspberry Pi Pico 2W (RP2350).
+        files: |
+          ulisp-picocalc-pico2w-*.uf2
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
